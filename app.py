@@ -5,8 +5,8 @@ from PIL import Image
 # --- 1. CẤU HÌNH BẢO MẬT ---
 # Khi chạy local: File này sẽ tìm key trong thư mục .streamlit/secrets.toml
 # Khi deploy: File này sẽ tìm key trong phần 'Secrets' của Streamlit Cloud
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
 else:
     st.error("Chưa cấu hình API Key. Vui lòng kiểm tra lại Secrets.")
     st.stop()
@@ -28,7 +28,7 @@ if uploaded_file:
         with st.spinner('Đang kết nối với trí tuệ nhân tạo...'):
             try:
                 # Dùng model Flash để tốc độ nhanh nhất (Free)
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.0-flash')
                 
                 prompt = """Phân tích ảnh món ăn này cho người bị bệnh Gout:
                 1. Tên món ăn.
