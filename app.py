@@ -237,7 +237,7 @@ with st.sidebar:
         "🫘 Đậu Hà Lan, đậu lăng",
         "🍄 Nấm (nhiều loại)",
     ]:
-        st.markdown(f"<small>{food}</small>", unsafe_allow_html=True)
+        st.caption(food)
 
     st.divider()
 
@@ -251,7 +251,7 @@ with st.sidebar:
         "🍗 Thịt gà, thịt lợn (ít, không da)",
         "💧 Uống ≥ 2 lít nước mỗi ngày",
     ]:
-        st.markdown(f"<small>{food}</small>", unsafe_allow_html=True)
+        st.caption(food)
 
     st.divider()
     st.caption("⚠️ Ứng dụng chỉ mang tính tham khảo. Hãy hỏi ý kiến bác sĩ cho tư vấn y tế chính thức.")
@@ -267,53 +267,80 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Input tabs
-tab1, tab2 = st.tabs(["📷 Chụp ảnh trực tiếp", "📁 Tải ảnh từ thiết bị"])
+# Mobile quick-reference expander
+with st.expander("⚠️ Xem thực phẩm cần tránh & an toàn cho Gout"):
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Cần tránh**")
+        for food in [
+            "🦐 Hải sản: tôm, cua, sò, mực",
+            "🥩 Nội tạng: gan, thận, tim, phổi",
+            "🐟 Cá trích, cá mòi, cá thu",
+            "🍖 Thịt đỏ nhiều: bò, dê, trâu",
+            "🍺 Bia, rượu bia các loại",
+            "🫘 Đậu Hà Lan, đậu lăng",
+            "🍄 Nấm (nhiều loại)",
+        ]:
+            st.caption(food)
+    with col_b:
+        st.markdown("**An toàn**")
+        for food in [
+            "🥚 Trứng, sữa ít béo, phô mai",
+            "🫚 Dầu olive, bơ, các loại hạt",
+            "🥬 Rau xanh (trừ rau bina)",
+            "🍚 Cơm, bánh mì, mì, bún",
+            "🍎 Trái cây tươi (cherry tốt nhất)",
+            "🍗 Thịt gà, thịt lợn (ít, không da)",
+            "💧 Uống ≥ 2 lít nước mỗi ngày",
+        ]:
+            st.caption(food)
 
+st.markdown("---")
+
+# Input: camera then file uploader (stacked, no tabs)
 image = None
 
-with tab1:
-    camera_photo = st.camera_input("Hướng camera vào món ăn và chụp")
-    if camera_photo:
-        image = Image.open(camera_photo)
+st.markdown("##### 📷 Chụp ảnh trực tiếp")
+camera_photo = st.camera_input("Hướng camera vào món ăn và chụp", label_visibility="collapsed")
+if camera_photo:
+    image = Image.open(camera_photo)
 
-with tab2:
-    uploaded_file = st.file_uploader(
-        "Chọn ảnh món ăn (JPG, PNG, WEBP)",
-        type=["jpg", "jpeg", "png", "webp"],
-        label_visibility="collapsed"
-    )
-    if uploaded_file:
-        image = Image.open(uploaded_file)
+st.markdown("<div style='text-align:center;color:#999;margin:0.4rem 0'>— hoặc —</div>", unsafe_allow_html=True)
+
+st.markdown("##### 📁 Tải ảnh từ thiết bị")
+uploaded_file = st.file_uploader(
+    "Chọn ảnh món ăn (JPG, PNG, WEBP)",
+    type=["jpg", "jpeg", "png", "webp"],
+    label_visibility="collapsed"
+)
+if uploaded_file:
+    image = Image.open(uploaded_file)
 
 # Image preview + Analyze button
 if image:
-    col_img, col_btn = st.columns([3, 1])
-    with col_img:
-        st.image(image, caption="Ảnh món ăn", use_container_width=True)
-    with col_btn:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        analyze_btn = st.button(
-            "🔬 Phân tích ngay",
-            type="primary",
-            use_container_width=True
-        )
+    st.image(image, caption="Ảnh món ăn", use_container_width=True)
+    analyze_btn = st.button(
+        "🔬 Phân tích ngay",
+        type="primary",
+        use_container_width=True
+    )
 
     if analyze_btn:
-        with st.spinner("🤖 AI đang phân tích món ăn của bạn..."):
+        with st.spinner("🤖 AI đang phân tích món ăn của bạn... (thường mất 5–10 giây)"):
             try:
                 result = analyze_food(image)
 
                 st.divider()
                 st.markdown("## 📊 Kết quả phân tích")
-                display_result(result)
+                with st.container(border=True):
+                    display_result(result)
 
                 # Save to history
                 st.session_state.scan_history.append({
                     "name":     result.get("food_name", "Không rõ"),
                     "level":    result.get("purine_level", "Unknown"),
                     "calories": result.get("calories", "?"),
-                    "time":     datetime.now().strftime("%H:%M"),
+                    "time":     datetime.now().strftime("%d/%m %H:%M"),
                 })
 
             except (json.JSONDecodeError, KeyError, TypeError):
