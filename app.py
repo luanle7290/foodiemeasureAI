@@ -297,24 +297,28 @@ with st.expander("⚠️ Xem thực phẩm cần tránh & an toàn cho Gout"):
 
 st.markdown("---")
 
-# Input: camera then file uploader (stacked, no tabs)
+# Input: radio selector then render chosen input only
 image = None
 
-st.markdown("##### 📷 Chụp ảnh trực tiếp")
-camera_photo = st.camera_input("Hướng camera vào món ăn và chụp", label_visibility="collapsed")
-if camera_photo:
-    image = Image.open(camera_photo)
-
-st.markdown("<div style='text-align:center;color:#999;margin:0.4rem 0'>— hoặc —</div>", unsafe_allow_html=True)
-
-st.markdown("##### 📁 Tải ảnh từ thiết bị")
-uploaded_file = st.file_uploader(
-    "Chọn ảnh món ăn (JPG, PNG, WEBP)",
-    type=["jpg", "jpeg", "png", "webp"],
+input_mode = st.radio(
+    "Chọn cách nhập ảnh:",
+    ["📷 Chụp ảnh trực tiếp", "📁 Tải ảnh từ thiết bị"],
+    horizontal=True,
     label_visibility="collapsed"
 )
-if uploaded_file:
-    image = Image.open(uploaded_file)
+
+if input_mode == "📷 Chụp ảnh trực tiếp":
+    camera_photo = st.camera_input("Hướng camera vào món ăn và chụp", label_visibility="collapsed")
+    if camera_photo:
+        image = Image.open(camera_photo)
+else:
+    uploaded_file = st.file_uploader(
+        "Chọn ảnh món ăn (JPG, PNG, WEBP)",
+        type=["jpg", "jpeg", "png", "webp"],
+        label_visibility="collapsed"
+    )
+    if uploaded_file:
+        image = Image.open(uploaded_file)
 
 # Image preview + Analyze button
 if image:
