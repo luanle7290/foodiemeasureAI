@@ -105,7 +105,7 @@ def get_badge_class(level: str) -> str:
 
 # --- AI ANALYSIS ---
 def analyze_food(image: Image.Image) -> dict | None:
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     prompt = """Analyze this food image carefully for someone with Gout (hyperuricemia).
 Respond ONLY with valid JSON — no markdown, no extra text. Use this exact structure:
@@ -140,7 +140,7 @@ Rules:
 
 def fallback_analyze(image: Image.Image) -> str:
     """Plain-text fallback if JSON parsing fails."""
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    model = genai.GenerativeModel("gemini-1.5-flash")
     prompt = """Phân tích ảnh món ăn này cho người bị bệnh Gout. Trình bày rõ ràng bằng tiếng Việt:
 1. 🍽️ Tên món ăn
 2. 🔥 Ước tính Calo (kcal/khẩu phần)
