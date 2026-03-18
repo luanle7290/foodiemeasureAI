@@ -3,6 +3,7 @@ import google.generativeai as genai
 from PIL import Image
 import json
 import re
+import html as html_lib
 from datetime import datetime
 
 # --- PAGE CONFIG ---
@@ -10,7 +11,7 @@ st.set_page_config(
     page_title="FoodieMeasure AI",
     page_icon="🥗",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"   # collapsed by default for mobile
 )
 
 # --- CUSTOM CSS ---
@@ -50,6 +51,29 @@ st.markdown("""
     .badge-medium { background: #f4a261; color: white; }
     .badge-high   { background: #e63946; color: white; }
 
+    .component-row {
+        background: #f8faf9;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        margin: 0.25rem 0;
+        font-size: 0.9rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .alt-chip {
+        display: inline-block;
+        background: #e8f5e9;
+        color: #1b4332;
+        border: 1px solid #52b788;
+        border-radius: 20px;
+        padding: 0.25rem 0.75rem;
+        margin: 0.2rem 0.2rem 0.2rem 0;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
     .history-item {
         background: #f8faf9;
         border-radius: 8px;
@@ -85,6 +109,10 @@ if "scan_history" not in st.session_state:
     st.session_state.scan_history = []
 
 # --- HELPER FUNCTIONS ---
+def escape(text) -> str:
+    """HTML-escape a value before injecting into unsafe_allow_html blocks."""
+    return html_lib.escape(str(text))
+
 def get_purine_emoji(level: str) -> str:
     l = level.lower()
     if l == "low":    return "🟢"
@@ -103,31 +131,93 @@ def get_badge_class(level: str) -> str:
     if l == "medium": return "badge-medium"
     return "badge-high"
 
+def resize_image(image: Image.Image, max_px: int = 1024) -> Image.Image:
+    """Resize image so its longest side is at most max_px."""
+    w, h = image.size
+    if max(w, h) > max_px:
+        scale = max_px / max(w, h)
+        image = image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    return image
+
+def format_share_text(result: dict) -> str:
+    """Format analysis result as plain text for sharing via Zalo/Messenger."""
+    dish   = result.get("dish_name", result.get("food_name", "Không rõ"))
+    level  = result.get("purine_level", "?")
+    emoji  = get_purine_emoji(level)
+    score  = result.get("gout_safety_score", "?")
+    cals   = result.get("calories", "?")
+    total  = result.get("total_purine_mg", result.get("purine_mg", "?"))
+    can    = result.get("can_eat", True)
+    advice = result.get("advice", "")
+
+    lines = [
+        "🥗 FoodieMeasure AI — Kết quả phân tích",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🍽️  Món ăn : {dish}",
+        f"🔥  Calo   : {cals} kcal",
+        f"⚗️  Purin  : {total} mg (ước tính)",
+        f"{emoji}  Mức Purin: {level}",
+        f"🛡️  An toàn: {score}/10",
+        "",
+    ]
+
+    components = result.get("components", [])
+    if components:
+        lines.append("📋 Thành phần:")
+        for c in components:
+            e = get_purine_emoji(c.get("purine_level", "Low"))
+            lines.append(f"   {e} {c.get('name','')} — ~{c.get('purine_mg','?')} mg")
+        lines.append("")
+
+    lines.append("⛔ Không nên ăn" if not can else "✅ Có thể ăn")
+
+    alts = result.get("safe_alternatives", [])
+    if alts and not can:
+        lines.append(f"✅ Thay thế an toàn: {', '.join(alts)}")
+
+    lines += ["", f"💊 Lời khuyên: {advice}", "",
+              "⚠️ Chỉ mang tính tham khảo. Hỏi bác sĩ để được tư vấn y tế."]
+    return "\n".join(lines)
+
+
 # --- AI ANALYSIS ---
-def analyze_food(image: Image.Image) -> dict | None:
+def analyze_food(image: Image.Image) -> dict:
     model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
     prompt = """Analyze this food image carefully for someone with Gout (hyperuricemia).
+Identify ALL visible food components and ingredients in the dish.
 Respond ONLY with valid JSON — no markdown, no extra text. Use this exact structure:
 
 {
-  "food_name": "Tên món ăn bằng tiếng Việt",
-  "calories": 350,
-  "purine_level": "Low",
-  "purine_mg": 45,
-  "gout_safety_score": 8,
+  "dish_name": "Tên món ăn tổng thể bằng tiếng Việt",
+  "components": [
+    {
+      "name": "Tên thành phần bằng tiếng Việt",
+      "purine_level": "Low",
+      "purine_mg": 15,
+      "note": "Ghi chú ngắn nếu cần (hoặc chuỗi rỗng)"
+    }
+  ],
+  "total_purine_mg": 180,
+  "calories": 450,
+  "purine_level": "High",
+  "gout_safety_score": 4,
   "safe_portion": "Mô tả khẩu phần an toàn bằng tiếng Việt",
-  "main_ingredients": ["nguyên liệu 1", "nguyên liệu 2", "nguyên liệu 3"],
-  "advice": "Lời khuyên cụ thể cho người bệnh Gout, 2-3 câu, bằng tiếng Việt.",
-  "can_eat": true
+  "advice": "Lời khuyên cụ thể 2–3 câu bằng tiếng Việt.",
+  "can_eat": false,
+  "safe_alternatives": ["Món thay thế 1", "Món thay thế 2", "Món thay thế 3"],
+  "main_ingredients": ["nguyên liệu 1", "nguyên liệu 2", "nguyên liệu 3"]
 }
 
 Rules:
-- purine_level must be exactly "Low", "Medium", or "High"
-- calories and purine_mg are integers
-- gout_safety_score is 1–10 (10 = safest for gout patients)
-- can_eat is a boolean
-- If the image is not food, return food_name as "Không phải thức ăn" with can_eat false
+- purine_level (dish-level AND per component) must be exactly "Low", "Medium", or "High"
+- components: list every distinct food component visible in the image (max 8 items)
+- total_purine_mg: sum of component purines for a normal serving portion (integer)
+- calories and purine_mg values are integers
+- gout_safety_score: 1–10 (10 = safest for gout patients)
+- can_eat: boolean
+- safe_alternatives: 3 similar but gout-safer dishes — ONLY when can_eat is false; use [] when can_eat is true
+- If the image is not food, return dish_name as "Không phải thức ăn", can_eat false, empty components []
 """
 
     response = model.generate_content([prompt, image])
@@ -141,13 +231,15 @@ Rules:
 def fallback_analyze(image: Image.Image) -> str:
     """Plain-text fallback if JSON parsing fails."""
     model = genai.GenerativeModel("gemini-2.5-flash-lite")
-    prompt = """Phân tích ảnh món ăn này cho người bị bệnh Gout. Trình bày rõ ràng bằng tiếng Việt:
+    prompt = """Phân tích ảnh món ăn này cho người bị bệnh Gout. Liệt kê từng thành phần thấy được, hàm lượng Purin của từng thành phần, rồi trình bày rõ ràng bằng tiếng Việt:
 1. 🍽️ Tên món ăn
-2. 🔥 Ước tính Calo (kcal/khẩu phần)
-3. ⚗️ Hàm lượng Purin: Thấp / Trung bình / Cao (ước tính mg/100g)
-4. 🛡️ Điểm an toàn Gout (1–10, 10 = an toàn nhất)
-5. 🥄 Khẩu phần an toàn đề nghị
-6. 💊 Lời khuyên cho người bệnh Gout (2–3 câu)"""
+2. 📋 Thành phần & Purin từng loại (Thấp/Trung bình/Cao)
+3. ⚗️ Tổng Purin ước tính (mg/khẩu phần)
+4. 🔥 Ước tính Calo (kcal/khẩu phần)
+5. 🛡️ Điểm an toàn Gout (1–10, 10 = an toàn nhất)
+6. 🥄 Khẩu phần an toàn đề nghị
+7. ✅ Món thay thế an toàn (nếu món này không nên ăn)
+8. 💊 Lời khuyên cho người bệnh Gout (2–3 câu)"""
     response = model.generate_content([prompt, image])
     return response.text
 
@@ -158,6 +250,7 @@ def display_result(result: dict):
     badge_cls = get_badge_class(level)
     emoji     = get_purine_emoji(level)
     can_eat   = result.get("can_eat", True)
+    dish_name = escape(result.get("dish_name", result.get("food_name", "Không xác định")))
 
     eat_tag = (
         "<span style='color:#e63946;font-weight:700'>⛔ Không nên ăn</span>"
@@ -165,37 +258,93 @@ def display_result(result: dict):
         "<span style='color:#52b788;font-weight:700'>✅ Có thể ăn</span>"
     )
 
+    # ── Header card ──────────────────────────────────────────────
     st.markdown(f"""
     <div class="result-card {card_cls}">
-        <h2 style="margin:0 0 0.6rem 0">🍽️ {result.get('food_name', 'Không xác định')}</h2>
-        <span class="badge {badge_cls}">{emoji} Purin: {level}</span>
+        <h2 style="margin:0 0 0.6rem 0">🍽️ {dish_name}</h2>
+        <span class="badge {badge_cls}">{emoji} Purin: {escape(level)}</span>
         &nbsp;&nbsp;{eat_tag}
     </div>
     """, unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns(3)
-    with c1: st.metric("🔥 Calories",         f"{result.get('calories', '?')} kcal")
-    with c2: st.metric("⚗️ Purin ước tính",   f"{result.get('purine_mg', '?')} mg/100g")
-    with c3: st.metric("🛡️ Điểm an toàn Gout", f"{result.get('gout_safety_score', '?')} / 10")
+    # ── Metrics ───────────────────────────────────────────────────
+    total_purine = result.get("total_purine_mg", result.get("purine_mg", "?"))
+    c1, c2 = st.columns(2)
+    with c1: st.metric("🔥 Calories", f"{result.get('calories', '?')} kcal")
+    with c2: st.metric("⚗️ Purin ước tính", f"{total_purine} mg / khẩu phần")
 
+    # ── Safety score meter ────────────────────────────────────────
+    score = result.get("gout_safety_score", 5)
+    try:
+        score_int = int(score)
+    except (ValueError, TypeError):
+        score_int = 5
+
+    if score_int >= 8:
+        meter_label = f"🛡️ Điểm an toàn: {score_int}/10 — ✅ Rất an toàn"
+        meter_color = "normal"
+    elif score_int >= 5:
+        meter_label = f"🛡️ Điểm an toàn: {score_int}/10 — ⚠️ Cần thận"
+        meter_color = "normal"
+    else:
+        meter_label = f"🛡️ Điểm an toàn: {score_int}/10 — ❌ Nguy hiểm"
+        meter_color = "normal"
+
+    st.progress(score_int / 10, text=meter_label)
+
+    # ── Component breakdown ───────────────────────────────────────
+    components = result.get("components", [])
+    if components:
+        st.markdown("**📋 Thành phần trong món:**")
+        for comp in components:
+            comp_level  = comp.get("purine_level", "Low")
+            comp_emoji  = get_purine_emoji(comp_level)
+            comp_badge  = get_badge_class(comp_level)
+            comp_name   = escape(comp.get("name", ""))
+            comp_mg     = comp.get("purine_mg", "?")
+            comp_note   = escape(comp.get("note", ""))
+            note_html   = f"<br><small style='color:#888'>{comp_note}</small>" if comp_note else ""
+            st.markdown(f"""
+            <div class="component-row">
+                <span>{comp_emoji} <strong>{comp_name}</strong>{note_html}</span>
+                <span class="badge {comp_badge}">~{comp_mg} mg</span>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("")
+
+    # ── Safe alternatives (only when can't eat) ───────────────────
+    alts = result.get("safe_alternatives", [])
+    if alts and not can_eat:
+        chips = "".join(
+            f'<span class="alt-chip">✅ {escape(a)}</span>' for a in alts
+        )
+        st.markdown(f"""
+        <div class="result-card" style="border-left:6px solid #52b788; background:#f0faf5">
+            <strong>💡 Món thay thế an toàn cho Gout:</strong><br><br>
+            {chips}
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Safe portion & advice ─────────────────────────────────────
+    safe_portion = escape(result.get("safe_portion", "Không có dữ liệu"))
+    advice       = escape(result.get("advice", ""))
     st.markdown(f"""
     <div class="result-card">
-        <strong>🥄 Khẩu phần an toàn:</strong><br>
-        {result.get('safe_portion', 'Không có dữ liệu')}
+        <strong>🥄 Khẩu phần an toàn:</strong><br>{safe_portion}
     </div>
     <div class="result-card">
-        <strong>💊 Lời khuyên cho người Gout:</strong><br>
-        {result.get('advice', '')}
+        <strong>💊 Lời khuyên cho người Gout:</strong><br>{advice}
     </div>
     """, unsafe_allow_html=True)
 
-    ingredients = result.get("main_ingredients", [])
-    if ingredients:
-        st.markdown(f"""
-        <div class="result-card">
-            <strong>🧺 Nguyên liệu chính:</strong> {', '.join(ingredients)}
-        </div>
-        """, unsafe_allow_html=True)
+    # ── Share result ──────────────────────────────────────────────
+    with st.expander("📤 Chia sẻ kết quả (copy để gửi Zalo / Messenger)"):
+        st.text_area(
+            label="Chọn tất cả và copy:",
+            value=format_share_text(result),
+            height=260,
+            label_visibility="collapsed",
+        )
 
 
 # ═══════════════════════════════════════════════
@@ -213,8 +362,8 @@ with st.sidebar:
             emoji = get_purine_emoji(item["level"])
             st.markdown(f"""
             <div class="history-item">
-                {emoji} <strong>{item['name']}</strong><br>
-                <small>{item['time']} &nbsp;·&nbsp; {item['calories']} kcal</small>
+                {emoji} <strong>{escape(item['name'])}</strong><br>
+                <small>{escape(item['time'])} &nbsp;·&nbsp; {escape(str(item['calories']))} kcal</small>
             </div>
             """, unsafe_allow_html=True)
         st.markdown("")
@@ -297,7 +446,7 @@ with st.expander("⚠️ Xem thực phẩm cần tránh & an toàn cho Gout"):
 
 st.markdown("---")
 
-# Input: radio selector then render chosen input only
+# ── Input mode ────────────────────────────────────────────────────
 image = None
 
 input_mode = st.radio(
@@ -320,8 +469,9 @@ else:
     if uploaded_file:
         image = Image.open(uploaded_file)
 
-# Image preview + Analyze button
+# ── Preview + Analyze ─────────────────────────────────────────────
 if image:
+    image = resize_image(image)   # resize before display and API call
     st.image(image, caption="Ảnh món ăn", use_container_width=True)
     analyze_btn = st.button(
         "🔬 Phân tích ngay",
@@ -341,14 +491,13 @@ if image:
 
                 # Save to history
                 st.session_state.scan_history.append({
-                    "name":     result.get("food_name", "Không rõ"),
+                    "name":     result.get("dish_name", result.get("food_name", "Không rõ")),
                     "level":    result.get("purine_level", "Unknown"),
                     "calories": result.get("calories", "?"),
                     "time":     datetime.now().strftime("%d/%m %H:%M"),
                 })
 
             except (json.JSONDecodeError, KeyError, TypeError):
-                # Fallback to plain text if JSON fails
                 st.warning("⚠️ Hiển thị kết quả dạng văn bản (chế độ dự phòng)")
                 try:
                     fallback_text = fallback_analyze(image)
@@ -357,13 +506,18 @@ if image:
                     st.error(f"❌ Không thể phân tích: {e2}")
 
             except Exception as e:
-                st.error(f"❌ Lỗi kết nối AI: {str(e)}")
+                err = str(e)
+                if "429" in err or "quota" in err.lower() or "rate" in err.lower():
+                    st.error("⏱️ Đã đạt giới hạn yêu cầu API. Vui lòng đợi 1 phút rồi thử lại.")
+                    st.info("💡 Mẹo: Gemini miễn phí cho phép 15 yêu cầu/phút. Thử lại sau ít giây.")
+                else:
+                    st.error(f"❌ Lỗi kết nối AI: {err}")
 
 else:
     st.markdown("""
     <div class="empty-state">
         <div class="icon">🍜</div>
         <p>Chụp ảnh hoặc tải ảnh món ăn lên để bắt đầu phân tích</p>
-        <small>FoodieMeasure AI sẽ phân tích hàm lượng Purin và đưa ra lời khuyên dinh dưỡng phù hợp cho người bệnh Gout</small>
+        <small>FoodieMeasure AI sẽ phân tích từng thành phần món ăn, hàm lượng Purin và đưa ra lời khuyên dinh dưỡng phù hợp cho người bệnh Gout</small>
     </div>
     """, unsafe_allow_html=True)
