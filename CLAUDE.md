@@ -2,7 +2,7 @@
 
 ## Project Overview
 FoodieMeasure AI is a Streamlit app that analyzes food images for Gout patients using Google Gemini AI.
-It is deployed on Streamlit Cloud at: https://foodiemeasureai-bqx3yge9nnrfgtkdssshu2.streamlit.app
+It is deployed on Streamlit Cloud at: https://foodiemeasureai.streamlit.app
 
 ## Tech Stack
 - Python + Streamlit
