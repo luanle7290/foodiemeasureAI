@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.gstack/
+.claude/
+*.jpg
+*.jpeg
+*.png
+*.webp
+.env

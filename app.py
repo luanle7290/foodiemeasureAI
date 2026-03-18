@@ -1,6 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import json
 import re
 import html as html_lib
@@ -104,32 +104,61 @@ else:
     st.error("⚠️ Chưa cấu hình API Key. Vui lòng kiểm tra lại Secrets.")
     st.stop()
 
+# --- CONSTANTS ---
+DAILY_SCAN_LIMIT = 20   # max scans per session (soft quota guard)
+HISTORY_MAX      = 50   # max entries kept in scan history
+
 # --- SESSION STATE ---
 if "scan_history" not in st.session_state:
     st.session_state.scan_history = []
+if "scan_count" not in st.session_state:
+    st.session_state.scan_count = 0
 
 # --- HELPER FUNCTIONS ---
 def escape(text) -> str:
     """HTML-escape a value before injecting into unsafe_allow_html blocks."""
     return html_lib.escape(str(text))
 
+# ── Purine level → visual styles (single source of truth) ──────────
+#
+#   PURINE_STYLES["low"|"medium"|"high"] = {emoji, card, badge}
+#   _DEFAULT_STYLE used when level is unknown / unexpected.
+#
+PURINE_STYLES = {
+    "low":    {"emoji": "🟢", "card": "purine-low",    "badge": "badge-low"},
+    "medium": {"emoji": "🟡", "card": "purine-medium", "badge": "badge-medium"},
+    "high":   {"emoji": "🔴", "card": "purine-high",   "badge": "badge-high"},
+}
+_DEFAULT_STYLE = PURINE_STYLES["high"]
+
 def get_purine_emoji(level: str) -> str:
-    l = level.lower()
-    if l == "low":    return "🟢"
-    if l == "medium": return "🟡"
-    return "🔴"
+    return PURINE_STYLES.get(level.lower(), _DEFAULT_STYLE)["emoji"]
 
 def get_card_class(level: str) -> str:
-    l = level.lower()
-    if l == "low":    return "purine-low"
-    if l == "medium": return "purine-medium"
-    return "purine-high"
+    return PURINE_STYLES.get(level.lower(), _DEFAULT_STYLE)["card"]
 
 def get_badge_class(level: str) -> str:
-    l = level.lower()
-    if l == "low":    return "badge-low"
-    if l == "medium": return "badge-medium"
-    return "badge-high"
+    return PURINE_STYLES.get(level.lower(), _DEFAULT_STYLE)["badge"]
+
+
+def safe_open_image(file_obj) -> "Image.Image | None":
+    """
+    Open an uploaded file as a PIL Image.
+    Returns None (and shows a Streamlit error) on corrupt / unreadable files.
+    Always converts to RGB so WEBP alpha channels don't trip up the Gemini API.
+    """
+    try:
+        img = Image.open(file_obj)
+        img.load()                  # force full decode — catches truncated files early
+        return img.convert("RGB")   # normalise to RGB (handles WEBP, RGBA, P-mode, etc.)
+    except UnidentifiedImageError:
+        st.error("⚠️ Tệp ảnh không hợp lệ. Vui lòng chọn ảnh JPG, PNG hoặc WEBP hợp lệ.")
+    except Image.DecompressionBombError:
+        st.error("⚠️ Ảnh quá lớn để xử lý. Vui lòng chọn ảnh có kích thước nhỏ hơn.")
+    except Exception:
+        st.error("⚠️ Không thể đọc tệp ảnh. Vui lòng thử lại với ảnh khác.")
+    return None
+
 
 def resize_image(image: Image.Image, max_px: int = 1024) -> Image.Image:
     """Resize image so its longest side is at most max_px."""
@@ -138,6 +167,7 @@ def resize_image(image: Image.Image, max_px: int = 1024) -> Image.Image:
         scale = max_px / max(w, h)
         image = image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
     return image
+
 
 def format_share_text(result: dict) -> str:
     """Format analysis result as plain text for sharing via Zalo/Messenger."""
@@ -221,6 +251,11 @@ Rules:
 """
 
     response = model.generate_content([prompt, image])
+
+    # Guard: Gemini occasionally returns an empty / blocked response
+    if not response.text:
+        raise ValueError("Gemini trả về phản hồi trống. Vui lòng thử lại.")
+
     text = response.text.strip()
     # Strip markdown fences if present
     text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -282,13 +317,10 @@ def display_result(result: dict):
 
     if score_int >= 8:
         meter_label = f"🛡️ Điểm an toàn: {score_int}/10 — ✅ Rất an toàn"
-        meter_color = "normal"
     elif score_int >= 5:
         meter_label = f"🛡️ Điểm an toàn: {score_int}/10 — ⚠️ Cần thận"
-        meter_color = "normal"
     else:
         meter_label = f"🛡️ Điểm an toàn: {score_int}/10 — ❌ Nguy hiểm"
-        meter_color = "normal"
 
     st.progress(score_int / 10, text=meter_label)
 
@@ -459,7 +491,7 @@ input_mode = st.radio(
 if input_mode == "📷 Chụp ảnh trực tiếp":
     camera_photo = st.camera_input("Hướng camera vào món ăn và chụp", label_visibility="collapsed")
     if camera_photo:
-        image = Image.open(camera_photo)
+        image = safe_open_image(camera_photo)
 else:
     uploaded_file = st.file_uploader(
         "Chọn ảnh món ăn (JPG, PNG, WEBP)",
@@ -467,51 +499,61 @@ else:
         label_visibility="collapsed"
     )
     if uploaded_file:
-        image = Image.open(uploaded_file)
+        image = safe_open_image(uploaded_file)
 
 # ── Preview + Analyze ─────────────────────────────────────────────
 if image:
     image = resize_image(image)   # resize before display and API call
     st.image(image, caption="Ảnh món ăn", use_container_width=True)
-    analyze_btn = st.button(
-        "🔬 Phân tích ngay",
-        type="primary",
-        use_container_width=True
-    )
 
-    if analyze_btn:
-        with st.spinner("🤖 AI đang phân tích món ăn của bạn... (thường mất 5–10 giây)"):
-            try:
-                result = analyze_food(image)
+    # ── Session quota guard ───────────────────────────────────────
+    if st.session_state.scan_count >= DAILY_SCAN_LIMIT:
+        st.warning(
+            f"⚠️ Bạn đã phân tích {DAILY_SCAN_LIMIT} món trong phiên này. "
+            "Vui lòng làm mới trang để tiếp tục."
+        )
+    else:
+        analyze_btn = st.button(
+            "🔬 Phân tích ngay",
+            type="primary",
+            use_container_width=True
+        )
 
-                st.divider()
-                st.markdown("## 📊 Kết quả phân tích")
-                with st.container(border=True):
-                    display_result(result)
-
-                # Save to history
-                st.session_state.scan_history.append({
-                    "name":     result.get("dish_name", result.get("food_name", "Không rõ")),
-                    "level":    result.get("purine_level", "Unknown"),
-                    "calories": result.get("calories", "?"),
-                    "time":     datetime.now().strftime("%d/%m %H:%M"),
-                })
-
-            except (json.JSONDecodeError, KeyError, TypeError):
-                st.warning("⚠️ Hiển thị kết quả dạng văn bản (chế độ dự phòng)")
+        if analyze_btn:
+            with st.spinner("🤖 AI đang phân tích món ăn của bạn... (thường mất 5–10 giây)"):
                 try:
-                    fallback_text = fallback_analyze(image)
-                    st.markdown(fallback_text)
-                except Exception as e2:
-                    st.error(f"❌ Không thể phân tích: {e2}")
+                    result = analyze_food(image)
 
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "quota" in err.lower() or "rate" in err.lower():
-                    st.error("⏱️ Đã đạt giới hạn yêu cầu API. Vui lòng đợi 1 phút rồi thử lại.")
-                    st.info("💡 Mẹo: Gemini miễn phí cho phép 15 yêu cầu/phút. Thử lại sau ít giây.")
-                else:
-                    st.error(f"❌ Lỗi kết nối AI: {err}")
+                    st.divider()
+                    st.markdown("## 📊 Kết quả phân tích")
+                    with st.container(border=True):
+                        display_result(result)
+
+                    # Save to history (capped at HISTORY_MAX)
+                    st.session_state.scan_history.append({
+                        "name":     result.get("dish_name", result.get("food_name", "Không rõ")),
+                        "level":    result.get("purine_level", "Unknown"),
+                        "calories": result.get("calories", "?"),
+                        "time":     datetime.now().strftime("%d/%m %H:%M"),
+                    })
+                    st.session_state.scan_history = st.session_state.scan_history[-HISTORY_MAX:]
+                    st.session_state.scan_count += 1
+
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    st.warning("⚠️ Hiển thị kết quả dạng văn bản (chế độ dự phòng)")
+                    try:
+                        fallback_text = fallback_analyze(image)
+                        st.markdown(fallback_text)
+                    except Exception as e2:
+                        st.error(f"❌ Không thể phân tích: {e2}")
+
+                except Exception as e:
+                    err = str(e)
+                    if "429" in err or "quota" in err.lower() or "rate" in err.lower():
+                        st.error("⏱️ Đã đạt giới hạn yêu cầu API. Vui lòng đợi 1 phút rồi thử lại.")
+                        st.info("💡 Mẹo: Gemini miễn phí cho phép 15 yêu cầu/phút. Thử lại sau ít giây.")
+                    else:
+                        st.error(f"❌ Lỗi kết nối AI: {err}")
 
 else:
     st.markdown("""
