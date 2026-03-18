@@ -276,6 +276,8 @@ def fallback_analyze(image: Image.Image) -> str:
 7. ✅ Món thay thế an toàn (nếu món này không nên ăn)
 8. 💊 Lời khuyên cho người bệnh Gout (2–3 câu)"""
     response = model.generate_content([prompt, image])
+    if not response.text:
+        raise ValueError("Gemini fallback returned an empty response.")
     return response.text
 
 
@@ -312,6 +314,7 @@ def display_result(result: dict):
     score = result.get("gout_safety_score", 5)
     try:
         score_int = int(score)
+        score_int = max(1, min(10, score_int))   # clamp — AI may return out-of-range values
     except (ValueError, TypeError):
         score_int = 5
 
@@ -333,7 +336,7 @@ def display_result(result: dict):
             comp_emoji  = get_purine_emoji(comp_level)
             comp_badge  = get_badge_class(comp_level)
             comp_name   = escape(comp.get("name", ""))
-            comp_mg     = comp.get("purine_mg", "?")
+            comp_mg     = escape(str(comp.get("purine_mg", "?")))
             comp_note   = escape(comp.get("note", ""))
             note_html   = f"<br><small style='color:#888'>{comp_note}</small>" if comp_note else ""
             st.markdown(f"""

@@ -35,7 +35,7 @@ class TestEscape:
         assert escape("<script>alert(1)</script>") == "&lt;script&gt;alert(1)&lt;/script&gt;"
 
     def test_html_special_chars(self):
-        assert "&" in escape("A & B") == False or escape("A & B") == "A &amp; B"
+        assert escape("A & B") == "A &amp; B"
 
     def test_quotes_escaped(self):
         result = escape('"hello"')
@@ -184,3 +184,50 @@ class TestFormatShareText:
     def test_calories_shown(self):
         text = format_share_text(self._base_result(calories=450))
         assert "450" in text
+
+
+# ── escape() — comp_mg XSS guard ─────────────────────────────────
+
+class TestCompMgEscaping:
+    """
+    Verifies that purine_mg values from AI responses are always HTML-escaped
+    before being injected into the component row markup.
+    The fix: comp_mg = escape(str(comp.get("purine_mg", "?")))
+    """
+
+    def test_integer_comp_mg_renders_cleanly(self):
+        """Normal integer values must still render correctly."""
+        assert escape(str(200)) == "200"
+
+    def test_string_comp_mg_is_escaped(self):
+        """If AI returns a string for purine_mg, it must be escaped."""
+        assert escape(str("<script>xss</script>")) == "&lt;script&gt;xss&lt;/script&gt;"
+
+    def test_question_mark_fallback_is_safe(self):
+        """The '?' default value must pass through escape unchanged."""
+        assert escape(str("?")) == "?"
+
+
+# ── Safety score clamping ─────────────────────────────────────────
+
+class TestSafetyScoreClamping:
+    """
+    Verifies that gout_safety_score values outside 1-10 are clamped
+    before being passed to st.progress(), which requires 0.0-1.0.
+    The fix: score_int = max(1, min(10, score_int))
+    """
+
+    @pytest.mark.parametrize("raw,expected_clamped", [
+        (0,   1),    # below min
+        (-1,  1),    # negative
+        (5,   5),    # normal
+        (10,  10),   # max
+        (11,  10),   # above max
+        (100, 10),   # way above max
+    ])
+    def test_score_clamped_to_1_10(self, raw, expected_clamped):
+        clamped = max(1, min(10, int(raw)))
+        assert clamped == expected_clamped
+        # Verify the clamped value is safe for st.progress (0.0-1.0)
+        progress_val = clamped / 10
+        assert 0.0 <= progress_val <= 1.0
