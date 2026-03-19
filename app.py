@@ -15,6 +15,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed"   # collapsed by default for mobile
 )
 
+# --- PWA META TAGS (manifest + Apple iOS) ---
+st.markdown("""
+<link rel="manifest" href="/app/static/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FoodieMeasure">
+<link rel="apple-touch-icon" href="/app/static/icon-180.png">
+<meta name="theme-color" content="#1B4332">
+""", unsafe_allow_html=True)
+
 # --- CUSTOM CSS (Design system: Plus Jakarta Sans + DM Sans, DESIGN.md) ---
 st.markdown("""
 <style>
