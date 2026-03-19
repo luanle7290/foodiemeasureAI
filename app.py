@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import streamlit.components.v1 as st_components
 from google import genai
 from PIL import Image, UnidentifiedImageError
 import json
@@ -481,7 +481,7 @@ def display_result(result: dict):
         share_text      = format_share_text(result)
         share_text_json = json.dumps(share_text)   # safely escaped for inline JS
         share_text_html = html_lib.escape(share_text)
-        components.html(f"""<!DOCTYPE html>
+        st_components.html(f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:'DM Sans',system-ui,sans-serif;background:transparent}}
