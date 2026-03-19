@@ -36,10 +36,14 @@ def _make_streamlit_stub():
 
 
 def _make_genai_stub():
-    """Minimal stub for google.generativeai so the import doesn't fail."""
-    genai = types.ModuleType("google.generativeai")
-    genai.configure = mock.MagicMock()
-    genai.GenerativeModel = mock.MagicMock()
+    """Minimal stub for google.genai (new SDK) so the import doesn't fail."""
+    genai = types.ModuleType("google.genai")
+    # Client() returns a mock whose .models.generate_content() returns a mock response
+    mock_response = mock.MagicMock()
+    mock_response.text = '{"dish_name":"Test","components":[],"total_purine_mg":0,"calories":0,"purine_level":"Low","gout_safety_score":9,"safe_portion":"","advice":"","can_eat":true,"safe_alternatives":[],"main_ingredients":[]}'
+    mock_client = mock.MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+    genai.Client = mock.MagicMock(return_value=mock_client)
     return genai
 
 
@@ -48,8 +52,8 @@ _st_stub = _make_streamlit_stub()
 sys.modules.setdefault("streamlit", _st_stub)
 
 _genai_stub = _make_genai_stub()
-sys.modules.setdefault("google.generativeai", _genai_stub)
+sys.modules.setdefault("google.genai", _genai_stub)
 # google namespace package
 _google = types.ModuleType("google")
-_google.generativeai = _genai_stub
+_google.genai = _genai_stub
 sys.modules.setdefault("google", _google)

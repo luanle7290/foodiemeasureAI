@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from PIL import Image, UnidentifiedImageError
 import json
 import re
@@ -99,7 +99,7 @@ st.markdown("""
 
 # --- API CONFIG ---
 if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    _genai_client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
     st.error("⚠️ Chưa cấu hình API Key. Vui lòng kiểm tra lại Secrets.")
     st.stop()
@@ -212,8 +212,6 @@ def format_share_text(result: dict) -> str:
 
 # --- AI ANALYSIS ---
 def analyze_food(image: Image.Image) -> dict:
-    model = genai.GenerativeModel("gemini-2.5-flash-lite")
-
     prompt = """Analyze this food image carefully for someone with Gout (hyperuricemia).
 Identify ALL visible food components and ingredients in the dish.
 Respond ONLY with valid JSON — no markdown, no extra text. Use this exact structure:
@@ -250,7 +248,10 @@ Rules:
 - If the image is not food, return dish_name as "Không phải thức ăn", can_eat false, empty components []
 """
 
-    response = model.generate_content([prompt, image])
+    response = _genai_client.models.generate_content(
+        model="gemini-2.5-flash-lite",
+        contents=[prompt, image],
+    )
 
     # Guard: Gemini occasionally returns an empty / blocked response
     if not response.text:
@@ -265,7 +266,6 @@ Rules:
 
 def fallback_analyze(image: Image.Image) -> str:
     """Plain-text fallback if JSON parsing fails."""
-    model = genai.GenerativeModel("gemini-2.5-flash-lite")
     prompt = """Phân tích ảnh món ăn này cho người bị bệnh Gout. Liệt kê từng thành phần thấy được, hàm lượng Purin của từng thành phần, rồi trình bày rõ ràng bằng tiếng Việt:
 1. 🍽️ Tên món ăn
 2. 📋 Thành phần & Purin từng loại (Thấp/Trung bình/Cao)
@@ -275,7 +275,10 @@ def fallback_analyze(image: Image.Image) -> str:
 6. 🥄 Khẩu phần an toàn đề nghị
 7. ✅ Món thay thế an toàn (nếu món này không nên ăn)
 8. 💊 Lời khuyên cho người bệnh Gout (2–3 câu)"""
-    response = model.generate_content([prompt, image])
+    response = _genai_client.models.generate_content(
+        model="gemini-2.5-flash-lite",
+        contents=[prompt, image],
+    )
     if not response.text:
         raise ValueError("Gemini fallback returned an empty response.")
     return response.text
