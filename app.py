@@ -14,84 +14,184 @@ st.set_page_config(
     initial_sidebar_state="collapsed"   # collapsed by default for mobile
 )
 
-# --- CUSTOM CSS ---
+# --- CUSTOM CSS (Design system: Plus Jakarta Sans + DM Sans, DESIGN.md) ---
 st.markdown("""
 <style>
+    /* ── Fonts ─────────────────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
+    /* ── Design tokens ─────────────────────────────────────────────── */
+    :root {
+        --green-900: #1B4332;
+        --green-600: #40916C;
+        --green-400: #52B788;
+        --green-100: #D8F3DC;
+        --green-50:  #F0FAF5;
+        --amber:     #F59E0B;
+        --amber-bg:  #FEF3C7;
+        --red:       #E63946;
+        --red-bg:    #FFE5E7;
+        --surface:   #FDFCF9;
+        --surface-2: #EDF4EF;
+        --border:    #E5E7EB;
+        --text:      #111827;
+        --text-muted:#6B7280;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+    }
+
+    /* ── Global font override ───────────────────────────────────────── */
+    html, body, [class*="css"], .stApp,
+    .stMarkdown, .stTextArea, .stRadio,
+    button, input, select, textarea {
+        font-family: 'DM Sans', sans-serif !important;
+        font-size: 16px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
     .main-header {
-        background: linear-gradient(135deg, #1b4332, #40916c);
+        background: linear-gradient(135deg, var(--green-900), var(--green-600));
         color: white;
-        padding: 1.5rem 2rem;
-        border-radius: 14px;
+        padding: 1.5rem 1.75rem;
+        border-radius: 16px;
         margin-bottom: 1.5rem;
         text-align: center;
+        box-shadow: var(--shadow-md);
     }
-    .main-header h1 { margin: 0; font-size: 2.2rem; font-weight: 700; }
-    .main-header p { margin: 0.4rem 0 0; opacity: 0.88; font-size: 1rem; }
+    .main-header h1 {
+        margin: 0;
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: clamp(1.6rem, 5vw, 2.2rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+    }
+    .main-header p {
+        margin: 0.4rem 0 0;
+        opacity: 0.88;
+        font-size: 0.95rem;
+        font-family: 'DM Sans', sans-serif !important;
+    }
 
+    /* ── Result cards ───────────────────────────────────────────────── */
     .result-card {
-        background: white;
-        border: 1px solid #e8e8e8;
+        background: var(--surface);
+        border: 1px solid var(--border);
         border-radius: 12px;
-        padding: 1.2rem 1.5rem;
-        margin: 0.6rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        padding: 1.1rem 1.4rem;
+        margin: 0.55rem 0;
+        box-shadow: var(--shadow-sm);
     }
-    .purine-low    { border-left: 6px solid #52b788; background: #f0faf5; }
-    .purine-medium { border-left: 6px solid #f4a261; background: #fff9f2; }
-    .purine-high   { border-left: 6px solid #e63946; background: #fff5f5; }
+    .result-card h2 {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+    .purine-low    { border-left: 5px solid var(--green-400); background: var(--green-50); }
+    .purine-medium { border-left: 5px solid var(--amber);     background: #FFFBF0; }
+    .purine-high   { border-left: 5px solid var(--red);       background: #FFF5F6; }
 
+    /* ── Badges ─────────────────────────────────────────────────────── */
     .badge {
         display: inline-block;
-        padding: 0.2rem 0.8rem;
-        border-radius: 20px;
+        padding: 0.25rem 0.8rem;
+        border-radius: 9999px;
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
         font-weight: 700;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
+        letter-spacing: 0.01em;
     }
-    .badge-low    { background: #52b788; color: white; }
-    .badge-medium { background: #f4a261; color: white; }
-    .badge-high   { background: #e63946; color: white; }
+    .badge-low    { background: var(--green-100); color: var(--green-900); }
+    .badge-medium { background: var(--amber-bg);  color: #92400E; }
+    .badge-high   { background: var(--red-bg);    color: var(--red); }
 
+    /* ── Component rows ─────────────────────────────────────────────── */
     .component-row {
-        background: #f8faf9;
+        background: var(--surface-2);
         border-radius: 8px;
-        padding: 0.5rem 1rem;
-        margin: 0.25rem 0;
+        padding: 0.55rem 1rem;
+        margin: 0.3rem 0;
         font-size: 0.9rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 0.5rem;
     }
 
+    /* ── Safe alternative chips ─────────────────────────────────────── */
     .alt-chip {
         display: inline-block;
-        background: #e8f5e9;
-        color: #1b4332;
-        border: 1px solid #52b788;
-        border-radius: 20px;
-        padding: 0.25rem 0.75rem;
-        margin: 0.2rem 0.2rem 0.2rem 0;
-        font-size: 0.85rem;
+        background: var(--green-50);
+        color: var(--green-900);
+        border: 1px solid var(--green-100);
+        border-radius: 9999px;
+        padding: 0.3rem 0.85rem;
+        margin: 0.2rem 0.25rem 0.2rem 0;
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: 0.82rem;
         font-weight: 600;
     }
 
+    /* ── Sidebar history items ──────────────────────────────────────── */
     .history-item {
-        background: #f8faf9;
+        background: var(--surface-2);
         border-radius: 8px;
         padding: 0.6rem 0.9rem;
         margin: 0.35rem 0;
-        font-size: 0.88rem;
-        border-left: 3px solid #40916c;
+        font-size: 0.86rem;
+        border-left: 3px solid var(--green-600);
+        line-height: 1.5;
     }
 
+    /* ── Empty state ────────────────────────────────────────────────── */
     .empty-state {
         text-align: center;
         padding: 3rem 1rem;
-        color: #999;
+        color: var(--text-muted);
     }
-    .empty-state .icon { font-size: 4rem; }
-    .empty-state p    { font-size: 1.05rem; margin-top: 0.8rem; }
-    .empty-state small { font-size: 0.85rem; }
+    .empty-state .icon { font-size: 3.5rem; }
+    .empty-state p     { font-size: 1rem; margin-top: 0.75rem; line-height: 1.6; }
+    .empty-state small { font-size: 0.85rem; opacity: 0.75; }
 
+    /* ── Analyze button (mobile-first: full-width, tall tap target) ─── */
+    .stButton > button[kind="primary"] {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        border-radius: 12px !important;
+        padding: 0.8rem 1.5rem !important;
+        min-height: 52px !important;
+        letter-spacing: 0.01em;
+        box-shadow: 0 3px 12px rgba(64,145,108,0.35) !important;
+        transition: transform 0.15s ease-out, box-shadow 0.15s ease-out !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 5px 16px rgba(64,145,108,0.45) !important;
+    }
+
+    /* ── Metric labels ──────────────────────────────────────────────── */
+    [data-testid="stMetricLabel"] {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.8rem !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 1.5rem !important;
+        color: var(--green-900) !important;
+    }
+
+    /* ── Mobile optimisations (≤ 640px) ────────────────────────────── */
+    @media (max-width: 640px) {
+        .main-header { padding: 1.2rem 1rem; }
+        .result-card { padding: 0.9rem 1rem; }
+        .component-row { font-size: 0.85rem; padding: 0.5rem 0.75rem; }
+        html, body, [class*="css"] { font-size: 15px !important; }
+    }
+
+    /* ── Hide Streamlit chrome ──────────────────────────────────────── */
     #MainMenu { visibility: hidden; }
     footer     { visibility: hidden; }
 </style>
