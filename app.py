@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 from PIL import Image, UnidentifiedImageError
 import json
@@ -477,12 +478,53 @@ def display_result(result: dict):
 
     # ── Share result ──────────────────────────────────────────────
     with st.expander("📤 Chia sẻ kết quả (copy để gửi Zalo / Messenger)"):
-        st.text_area(
-            label="Chọn tất cả và copy:",
-            value=format_share_text(result),
-            height=260,
-            label_visibility="collapsed",
-        )
+        share_text      = format_share_text(result)
+        share_text_json = json.dumps(share_text)   # safely escaped for inline JS
+        share_text_html = html_lib.escape(share_text)
+        components.html(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:'DM Sans',system-ui,sans-serif;background:transparent}}
+.wrap{{position:relative;background:#FDFCF9;border:1px solid #E5E7EB;border-radius:10px;padding:12px 16px 14px;padding-top:42px}}
+pre{{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13.5px;line-height:1.65;color:#111827}}
+.btn{{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #D1D5DB;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;transition:all .15s ease}}
+.btn:hover{{background:#F3F4F6;border-color:#40916C;color:#40916C}}
+.btn.ok{{background:#D8F3DC;border-color:#52B788;color:#1B4332}}
+svg{{flex-shrink:0}}
+</style></head><body>
+<div class="wrap">
+  <button class="btn" id="btn" onclick="doCopy()">
+    <svg id="icon-copy" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    <svg id="icon-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="20 6 9 17 4 12"/></svg>
+    <span id="btn-label">Copy</span>
+  </button>
+  <pre>{share_text_html}</pre>
+</div>
+<script>
+const TEXT={share_text_json};
+function doCopy(){{
+  navigator.clipboard.writeText(TEXT).then(()=>{{
+    document.getElementById('icon-copy').style.display='none';
+    document.getElementById('icon-check').style.display='';
+    document.getElementById('btn-label').textContent='Đã copy!';
+    document.getElementById('btn').classList.add('ok');
+    setTimeout(()=>{{
+      document.getElementById('icon-copy').style.display='';
+      document.getElementById('icon-check').style.display='none';
+      document.getElementById('btn-label').textContent='Copy';
+      document.getElementById('btn').classList.remove('ok');
+    }},2000);
+  }}).catch(()=>{{
+    const ta=document.createElement('textarea');
+    ta.value=TEXT;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    document.getElementById('btn-label').textContent='Đã copy!';
+    document.getElementById('btn').classList.add('ok');
+    setTimeout(()=>{{document.getElementById('btn-label').textContent='Copy';document.getElementById('btn').classList.remove('ok');}},2000);
+  }});
+}}
+</script>
+</body></html>""", height=300, scrolling=False)
 
 
 # ═══════════════════════════════════════════════
