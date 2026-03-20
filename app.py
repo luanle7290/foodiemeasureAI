@@ -5,6 +5,7 @@ from PIL import Image, UnidentifiedImageError
 import json
 import re
 import html as html_lib
+import time
 from datetime import datetime
 
 # --- PAGE CONFIG ---
@@ -220,6 +221,39 @@ else:
 DAILY_SCAN_LIMIT = 20   # max scans per session (soft quota guard)
 HISTORY_MAX      = 50   # max entries kept in scan history
 
+# --- MODEL CONFIG ---
+_MODEL_LITE     = "gemini-2.5-flash-lite"
+_MODEL_FULL     = "gemini-2.5-flash"
+_LITE_COOLDOWN  = 60    # seconds before retrying lite after a rate-limit
+
+@st.cache_resource
+def _model_state() -> dict:
+    """Shared across ALL sessions — tracks which model is currently active."""
+    return {"model": _MODEL_LITE, "lite_limited_at": None}
+
+def get_active_model() -> str:
+    """Return the model to use; auto-restore lite after cooldown."""
+    state = _model_state()
+    if state["model"] == _MODEL_FULL and state["lite_limited_at"] is not None:
+        if time.time() - state["lite_limited_at"] >= _LITE_COOLDOWN:
+            state["model"]           = _MODEL_LITE
+            state["lite_limited_at"] = None
+    return state["model"]
+
+def _call_gemini(contents):
+    """Call Gemini with automatic lite → full fallback on 429 rate-limit."""
+    state = _model_state()
+    model = get_active_model()
+    try:
+        return _genai_client.models.generate_content(model=model, contents=contents)
+    except Exception as e:
+        err = str(e)
+        if ("429" in err or "quota" in err.lower() or "exhausted" in err.lower()) and model == _MODEL_LITE:
+            state["model"]           = _MODEL_FULL
+            state["lite_limited_at"] = time.time()
+            return _genai_client.models.generate_content(model=_MODEL_FULL, contents=contents)
+        raise
+
 # --- SESSION STATE ---
 if "scan_history" not in st.session_state:
     st.session_state.scan_history = []
@@ -360,10 +394,7 @@ Rules:
 - If the image is not food, return dish_name as "Không phải thức ăn", can_eat false, empty components []
 """
 
-    response = _genai_client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=[prompt, image],
-    )
+    response = _call_gemini([prompt, image])
 
     # Guard: Gemini occasionally returns an empty / blocked response
     if not response.text:
@@ -387,10 +418,7 @@ def fallback_analyze(image: Image.Image) -> str:
 6. 🥄 Khẩu phần an toàn đề nghị
 7. ✅ Món thay thế an toàn (nếu món này không nên ăn)
 8. 💊 Lời khuyên cho người bệnh Gout (2–3 câu)"""
-    response = _genai_client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=[prompt, image],
-    )
+    response = _call_gemini([prompt, image])
     if not response.text:
         raise ValueError("Gemini fallback returned an empty response.")
     return response.text
@@ -708,9 +736,9 @@ if image:
 
                 except Exception as e:
                     err = str(e)
-                    if "429" in err or "quota" in err.lower() or "rate" in err.lower():
-                        st.error("⏱️ Đã đạt giới hạn yêu cầu API. Vui lòng đợi 1 phút rồi thử lại.")
-                        st.info("💡 Mẹo: Gemini miễn phí cho phép 15 yêu cầu/phút. Thử lại sau ít giây.")
+                    if "429" in err or "quota" in err.lower() or "exhausted" in err.lower():
+                        st.error("⏱️ Cả hai model AI đều đang bận. Vui lòng đợi 1 phút rồi thử lại.")
+                        st.info("💡 App tự động dùng model dự phòng khi cần — thử lại sau ít giây.")
                     else:
                         st.error(f"❌ Lỗi kết nối AI: {err}")
 
